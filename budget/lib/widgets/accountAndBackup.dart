@@ -42,6 +42,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:universal_html/html.dart' as html;
 import 'dart:io';
 import 'package:budget/struct/randomConstants.dart';
+import 'package:budget/struct/driveSync.dart';
 
 Future<bool> checkConnection() async {
   late bool isConnected;
@@ -119,6 +120,10 @@ Future<bool> signInGoogle(
         "https://www.googleapis.com/auth/userinfo.email",
         drive.DriveApi.driveAppdataScope,
         ...(drivePermissionsAttachments == true
+            ? [drive.DriveApi.driveFileScope]
+            : []),
+        // Add drive.file scope if using shared folder
+        ...(appStateSettings["useSharedDriveFolder"] == true
             ? [drive.DriveApi.driveFileScope]
             : []),
         ...(gMailPermissions == true
@@ -435,7 +440,14 @@ Future<void> createBackup(
       driveFile.name =
           getCurrentDeviceSyncBackupFileName(clientIDForSync: clientIDForSync);
     driveFile.modifiedTime = DateTime.now().toUtc();
-    driveFile.parents = ["appDataFolder"];
+    
+    // Set parent folder based on user preference
+    if (appStateSettings["useSharedDriveFolder"] == true) {
+      final folderId = await DriveSyncManager.getOrCreateCashewFolder(driveApi);
+      driveFile.parents = [folderId];
+    } else {
+      driveFile.parents = ["appDataFolder"];
+    }
 
     await driveApi.files.create(driveFile, uploadMedia: media);
 
@@ -487,11 +499,20 @@ Future<void> deleteRecentBackups(context, amountToKeep,
     final authenticateClient = GoogleAuthClient(authHeaders);
     final driveApi = drive.DriveApi(authenticateClient);
 
-    drive.FileList fileList = await driveApi.files.list(
-      spaces: 'appDataFolder',
-      $fields: 'files(id, name, modifiedTime, size)',
-    );
-    List<drive.File>? files = fileList.files;
+    List<drive.File>? files;
+    
+    if (appStateSettings["useSharedDriveFolder"] == true) {
+      // List files from shared folder
+      files = await DriveSyncManager.listFilesInCashewFolder(driveApi);
+    } else {
+      // List files from appDataFolder
+      drive.FileList fileList = await driveApi.files.list(
+        spaces: 'appDataFolder',
+        $fields: 'files(id, name, modifiedTime, size)',
+      );
+      files = fileList.files;
+    }
+    
     if (files == null) {
       throw "No backups found.";
     }
@@ -768,10 +789,18 @@ Future<(drive.DriveApi? driveApi, List<drive.File>?)> getDriveFiles() async {
     final authenticateClient = GoogleAuthClient(authHeaders);
     drive.DriveApi driveApi = drive.DriveApi(authenticateClient);
 
-    drive.FileList fileList = await driveApi.files.list(
-        spaces: 'appDataFolder',
-        $fields: 'files(id, name, modifiedTime, size)');
-    return (driveApi, fileList.files);
+    List<drive.File>? files;
+    
+    if (appStateSettings["useSharedDriveFolder"] == true) {
+      files = await DriveSyncManager.listFilesInCashewFolder(driveApi);
+    } else {
+      drive.FileList fileList = await driveApi.files.list(
+          spaces: 'appDataFolder',
+          $fields: 'files(id, name, modifiedTime, size)');
+      files = fileList.files;
+    }
+    
+    return (driveApi, files);
   } catch (e) {
     if (e is DetailedApiRequestError && e.status == 401) {
       await refreshGoogleSignIn();

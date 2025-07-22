@@ -132,6 +132,7 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "EmailAutoTransactions-amountOfEmails": 10,
     "autoBackups": true,
     "autoBackupsFrequency": 3, //in days
+    "useSharedDriveFolder": true, // Use visible Google Drive folder by default
     "hasSignedIn": false,
     "lastBackup": DateTime.now().subtract(Duration(days: 1)).toString(),
     "lastLoginVersion": "",

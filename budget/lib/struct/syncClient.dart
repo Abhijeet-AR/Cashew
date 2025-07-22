@@ -6,6 +6,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/struct/driveSync.dart';
 import 'package:budget/widgets/accountAndBackup.dart';
 import 'package:budget/widgets/navigationFramework.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -132,9 +133,15 @@ Future<bool> createSyncBackup(
     throw "Failed to login to Google Drive";
   }
 
-  drive.FileList fileList = await driveApi.files.list(
-      spaces: 'appDataFolder', $fields: 'files(id, name, modifiedTime, size)');
-  List<drive.File>? files = fileList.files;
+  List<drive.File>? files;
+  
+  if (appStateSettings["useSharedDriveFolder"] == true) {
+    files = await DriveSyncManager.listFilesInCashewFolder(driveApi);
+  } else {
+    drive.FileList fileList = await driveApi.files.list(
+        spaces: 'appDataFolder', $fields: 'files(id, name, modifiedTime, size)');
+    files = fileList.files;
+  }
 
   for (drive.File file in files ?? []) {
     if (isCurrentDeviceSyncBackupFile(file.name)) {
@@ -253,9 +260,15 @@ Future<bool> _syncData(BuildContext context) async {
 
   await createSyncBackup();
 
-  drive.FileList fileList = await driveApi.files.list(
-      spaces: 'appDataFolder', $fields: 'files(id, name, modifiedTime, size)');
-  List<drive.File>? files = fileList.files;
+  List<drive.File>? files;
+  
+  if (appStateSettings["useSharedDriveFolder"] == true) {
+    files = await DriveSyncManager.listFilesInCashewFolder(driveApi);
+  } else {
+    drive.FileList fileList = await driveApi.files.list(
+        spaces: 'appDataFolder', $fields: 'files(id, name, modifiedTime, size)');
+    files = fileList.files;
+  }
 
   if (files == null) {
     throw "No backups found.";
